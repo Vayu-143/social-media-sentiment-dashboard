@@ -1,4 +1,9 @@
+import sys
 import os
+
+# Fix import issue for Streamlit Cloud
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 import pickle
 import pandas as pd
 import streamlit as st
@@ -15,24 +20,31 @@ data_path = os.path.join(BASE_DIR, 'data', 'dataset.csv')
 model_path = os.path.join(BASE_DIR, 'models', 'model.pkl')
 vectorizer_path = os.path.join(BASE_DIR, 'models', 'vectorizer.pkl')
 
-# ---------------- LOAD OR TRAIN MODEL ---------------- #
-if not os.path.exists(model_path) or not os.path.exists(vectorizer_path):
-    st.warning("Model not found. Training model...")
-    model, vectorizer = train_model()
-else:
-    model = pickle.load(open(model_path, 'rb'))
-    vectorizer = pickle.load(open(vectorizer_path, 'rb'))
-
-# ---------------- LOAD DATA ---------------- #
-df = pd.read_csv(data_path)
-
-df['text'] = df['text'].astype(str)
-df = df.dropna(subset=['text', 'sentiment'])
-
-# ---------------- UI ---------------- #
+# ---------------- PAGE CONFIG ---------------- #
 st.set_page_config(page_title="Sentiment Dashboard", layout="wide")
 
 st.title("📊 Social Media Sentiment Analysis Dashboard")
+
+# ---------------- LOAD OR TRAIN MODEL ---------------- #
+try:
+    if not os.path.exists(model_path) or not os.path.exists(vectorizer_path):
+        st.warning("⚠️ Model not found. Training model... (first run only)")
+        model, vectorizer = train_model()
+    else:
+        model = pickle.load(open(model_path, 'rb'))
+        vectorizer = pickle.load(open(vectorizer_path, 'rb'))
+except Exception as e:
+    st.error(f"Error loading model: {e}")
+    st.stop()
+
+# ---------------- LOAD DATA ---------------- #
+try:
+    df = pd.read_csv(data_path)
+    df['text'] = df['text'].astype(str)
+    df = df.dropna(subset=['text', 'sentiment'])
+except Exception as e:
+    st.error(f"Error loading dataset: {e}")
+    st.stop()
 
 # ---------------- INPUT ---------------- #
 st.subheader("Analyze New Post")
@@ -40,16 +52,19 @@ st.subheader("Analyze New Post")
 user_input = st.text_area("Enter text")
 
 if st.button("Analyze"):
-    cleaned = clean_text(user_input)
-    vector = vectorizer.transform([cleaned])
-    prediction = model.predict(vector)[0]
-
-    if prediction == "positive":
-        st.success(f"Prediction: {prediction}")
-    elif prediction == "negative":
-        st.error(f"Prediction: {prediction}")
+    if user_input.strip() == "":
+        st.warning("Please enter some text")
     else:
-        st.warning(f"Prediction: {prediction}")
+        cleaned = clean_text(user_input)
+        vector = vectorizer.transform([cleaned])
+        prediction = model.predict(vector)[0]
+
+        if prediction == "positive":
+            st.success(f"Prediction: {prediction}")
+        elif prediction == "negative":
+            st.error(f"Prediction: {prediction}")
+        else:
+            st.warning(f"Prediction: {prediction}")
 
 # ---------------- DATA PREVIEW ---------------- #
 st.subheader("Dataset Preview")
@@ -60,9 +75,10 @@ st.subheader("Sentiment Distribution")
 
 fig, ax = plt.subplots()
 sns.countplot(x='sentiment', data=df, ax=ax)
+ax.set_title("Sentiment Count")
 st.pyplot(fig)
 
-# ---------------- TEXT LENGTH ---------------- #
+# ---------------- TEXT LENGTH INSIGHT ---------------- #
 st.subheader("Text Length Insight")
 
 df['length'] = df['text'].apply(lambda x: len(str(x)))
