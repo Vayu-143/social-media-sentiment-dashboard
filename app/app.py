@@ -28,7 +28,7 @@ st.sidebar.info("""
 👨‍💻 Built with ML + NLP  
 🚀 Deployed using Streamlit  
 
-Author: Your Name
+Author: Vayunandan Mishra
 """)
 
 # ==============================
