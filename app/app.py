@@ -4,6 +4,7 @@ import pickle
 import os
 import matplotlib.pyplot as plt
 from wordcloud import WordCloud
+from collections import Counter
 
 # ==============================
 # PAGE CONFIG
@@ -11,13 +12,25 @@ from wordcloud import WordCloud
 st.set_page_config(page_title="Sentiment Dashboard", layout="wide")
 
 # ==============================
-# PATH SETUP
+# UI STYLE
+# ==============================
+st.markdown("""
+<style>
+.big-font {
+    font-size:20px !important;
+}
+</style>
+""", unsafe_allow_html=True)
+
+# ==============================
+# PATHS
 # ==============================
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 data_path = os.path.join(BASE_DIR, 'data', 'dataset.csv')
 model_path = os.path.join(BASE_DIR, 'models', 'model.pkl')
 vectorizer_path = os.path.join(BASE_DIR, 'models', 'vectorizer.pkl')
+feedback_path = os.path.join(BASE_DIR, 'outputs', 'feedback.csv')
 
 # ==============================
 # SIDEBAR
@@ -36,7 +49,9 @@ Author: Vayunandan Mishra
 # ==============================
 @st.cache_data
 def load_data():
-    return pd.read_csv(data_path)
+    df = pd.read_csv(data_path)
+    df['text'] = df['text'].fillna("").astype(str)
+    return df
 
 df = load_data()
 
@@ -46,12 +61,11 @@ df = load_data()
 @st.cache_resource
 def load_model():
     if not os.path.exists(model_path):
-        st.warning("Model not found. Please train the model first.")
+        st.warning("Model not found. Train model first.")
         return None, None
-    else:
-        model = pickle.load(open(model_path, 'rb'))
-        vectorizer = pickle.load(open(vectorizer_path, 'rb'))
-        return model, vectorizer
+    model = pickle.load(open(model_path, 'rb'))
+    vectorizer = pickle.load(open(vectorizer_path, 'rb'))
+    return model, vectorizer
 
 model, vectorizer = load_model()
 
@@ -75,24 +89,34 @@ This dashboard analyzes social media text and predicts sentiment using Machine L
 col1, col2, col3 = st.columns(3)
 
 col1.metric("Total Rows", len(df))
-col2.metric("Positive", (df['sentiment'] == "positive").sum())
-col3.metric("Negative", (df['sentiment'] == "negative").sum())
+col2.metric("Positive", (df['sentiment']=="positive").sum())
+col3.metric("Negative", (df['sentiment']=="negative").sum())
 
 # ==============================
-# INPUT TEXT
+# INPUT + PREDICTION
 # ==============================
 st.subheader("Analyze New Post")
 
 user_input = st.text_area("Enter text")
 
+prediction = None
+
 if st.button("Analyze"):
     if model is None:
         st.error("Model not loaded")
     elif user_input.strip() == "":
-        st.warning("Please enter text")
+        st.warning("Enter some text")
     else:
         vect_text = vectorizer.transform([user_input])
         prediction = model.predict(vect_text)[0]
+
+        # confidence (if supported)
+        try:
+            probs = model.predict_proba(vect_text)
+            confidence = max(probs[0])
+            st.write(f"Confidence: {confidence:.2f}")
+        except:
+            st.write("Confidence not available for this model")
 
         if prediction == "positive":
             st.success("😊 Positive Sentiment")
@@ -102,7 +126,29 @@ if st.button("Analyze"):
             st.warning("😐 Neutral Sentiment")
 
 # ==============================
-# FILTER
+# FEEDBACK SYSTEM
+# ==============================
+if prediction is not None:
+    feedback = st.radio("Was this prediction correct?", ["Yes", "No"])
+
+    if st.button("Submit Feedback"):
+        feedback_data = {
+            "text": user_input,
+            "prediction": prediction,
+            "feedback": feedback
+        }
+
+        feedback_df = pd.DataFrame([feedback_data])
+
+        if os.path.exists(feedback_path):
+            feedback_df.to_csv(feedback_path, mode='a', header=False, index=False)
+        else:
+            feedback_df.to_csv(feedback_path, index=False)
+
+        st.success("Feedback saved!")
+
+# ==============================
+# FILTER + TABLE
 # ==============================
 st.subheader("Dataset Preview")
 
@@ -116,13 +162,12 @@ else:
 st.dataframe(filtered_df.head(10))
 
 # ==============================
-# DOWNLOAD BUTTON
+# DOWNLOAD
 # ==============================
 st.download_button(
     label="Download Dataset",
     data=df.to_csv(index=False),
-    file_name='dataset.csv',
-    mime='text/csv'
+    file_name="dataset.csv"
 )
 
 # ==============================
@@ -130,14 +175,14 @@ st.download_button(
 # ==============================
 st.subheader("Sentiment Distribution")
 
-sentiment_counts = df['sentiment'].value_counts()
+counts = df['sentiment'].value_counts()
 
 fig, ax = plt.subplots()
-ax.bar(sentiment_counts.index, sentiment_counts.values)
+ax.bar(counts.index, counts.values)
 st.pyplot(fig)
 
 # ==============================
-# WORDCLOUDS (FIXED VERSION)
+# WORDCLOUDS
 # ==============================
 st.subheader("Sentiment WordClouds")
 
@@ -147,7 +192,6 @@ def generate_wordcloud(data, title):
     text = " ".join(data.dropna().astype(str))
 
     if text.strip() == "":
-        st.write(f"No data for {title}")
         return None
 
     wc = WordCloud(width=400, height=300, background_color='black').generate(text)
@@ -174,6 +218,20 @@ with col3:
         st.pyplot(fig3)
 
 # ==============================
+# TOP WORDS
+# ==============================
+st.subheader("Top Words")
+
+words = " ".join(df['text']).split()
+common_words = Counter(words).most_common(10)
+
+words_df = pd.DataFrame(common_words, columns=['word', 'count'])
+
+fig, ax = plt.subplots()
+ax.bar(words_df['word'], words_df['count'])
+st.pyplot(fig)
+
+# ==============================
 # CONFUSION MATRIX
 # ==============================
 st.subheader("Model Performance")
@@ -186,15 +244,11 @@ else:
     st.warning("Confusion matrix not found")
 
 # ==============================
-# TEXT LENGTH INSIGHT (FIXED)
+# TEXT LENGTH (SAFE)
 # ==============================
 st.subheader("Text Length Insight")
 
-# FIX: clean text column safely
-df['text'] = df['text'].fillna("").astype(str)
-
-# Now compute length
-df['length'] = df['text'].apply(lambda x: len(x))
+df['length'] = df['text'].apply(lambda x: len(str(x)))
 
 fig, ax = plt.subplots()
 ax.plot(df['length'])
