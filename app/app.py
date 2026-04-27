@@ -25,23 +25,33 @@ st.set_page_config(page_title="Sentiment Dashboard", layout="wide")
 
 st.title("📊 Social Media Sentiment Analysis Dashboard")
 
-# ---------------- LOAD OR TRAIN MODEL ---------------- #
-try:
-    if not os.path.exists(model_path) or not os.path.exists(vectorizer_path):
-        st.warning("⚠️ Model not found. Training model... (first run only)")
-        model, vectorizer = train_model()
-    else:
-        model = pickle.load(open(model_path, 'rb'))
-        vectorizer = pickle.load(open(vectorizer_path, 'rb'))
-except Exception as e:
-    st.error(f"Error loading model: {e}")
-    st.stop()
+# ---------------- LOAD MODEL (CACHED) ---------------- #
+@st.cache_resource
+def load_model():
+    try:
+        if not os.path.exists(model_path) or not os.path.exists(vectorizer_path):
+            st.warning("⚠️ Model not found. Training model... (first run only)")
+            return train_model()
+        else:
+            model = pickle.load(open(model_path, 'rb'))
+            vectorizer = pickle.load(open(vectorizer_path, 'rb'))
+            return model, vectorizer
+    except Exception as e:
+        st.error(f"Error loading/training model: {e}")
+        st.stop()
+
+model, vectorizer = load_model()
 
 # ---------------- LOAD DATA ---------------- #
-try:
+@st.cache_data
+def load_data():
     df = pd.read_csv(data_path)
     df['text'] = df['text'].astype(str)
     df = df.dropna(subset=['text', 'sentiment'])
+    return df
+
+try:
+    df = load_data()
 except Exception as e:
     st.error(f"Error loading dataset: {e}")
     st.stop()
