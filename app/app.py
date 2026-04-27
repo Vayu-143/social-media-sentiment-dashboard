@@ -190,7 +190,11 @@ else:
 # ==============================
 st.subheader("Text Length Insight")
 
-df['length'] = df['text'].astype(str).apply(len)
+# FIX: clean text column safely
+df['text'] = df['text'].fillna("").astype(str)
+
+# Now compute length
+df['length'] = df['text'].apply(lambda x: len(x))
 
 fig, ax = plt.subplots()
 ax.plot(df['length'])
