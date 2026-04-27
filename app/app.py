@@ -1,88 +1,73 @@
-import streamlit as st
+import os
 import pickle
 import pandas as pd
-import os
+import streamlit as st
+import matplotlib.pyplot as plt
+import seaborn as sns
 
-# =========================
-# PATH SETUP
-# =========================
+from src.preprocess import clean_text
+from src.train import train_model
 
+# ---------------- PATH SETUP ---------------- #
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 data_path = os.path.join(BASE_DIR, 'data', 'dataset.csv')
 model_path = os.path.join(BASE_DIR, 'models', 'model.pkl')
 vectorizer_path = os.path.join(BASE_DIR, 'models', 'vectorizer.pkl')
-output_path = os.path.join(BASE_DIR, 'outputs', 'predictions.csv')
 
-# =========================
-# LOAD MODEL
-# =========================
+# ---------------- LOAD OR TRAIN MODEL ---------------- #
+if not os.path.exists(model_path) or not os.path.exists(vectorizer_path):
+    st.warning("Model not found. Training model...")
+    model, vectorizer = train_model()
+else:
+    model = pickle.load(open(model_path, 'rb'))
+    vectorizer = pickle.load(open(vectorizer_path, 'rb'))
 
-model = pickle.load(open(model_path, 'rb'))
-vectorizer = pickle.load(open(vectorizer_path, 'rb'))
+# ---------------- LOAD DATA ---------------- #
+df = pd.read_csv(data_path)
 
-# =========================
-# UI
-# =========================
+df['text'] = df['text'].astype(str)
+df = df.dropna(subset=['text', 'sentiment'])
 
+# ---------------- UI ---------------- #
 st.set_page_config(page_title="Sentiment Dashboard", layout="wide")
 
 st.title("📊 Social Media Sentiment Analysis Dashboard")
 
-# =========================
-# INPUT
-# =========================
-
+# ---------------- INPUT ---------------- #
 st.subheader("Analyze New Post")
 
 user_input = st.text_area("Enter text")
 
 if st.button("Analyze"):
-    if user_input.strip() == "":
-        st.warning("Please enter some text")
+    cleaned = clean_text(user_input)
+    vector = vectorizer.transform([cleaned])
+    prediction = model.predict(vector)[0]
+
+    if prediction == "positive":
+        st.success(f"Prediction: {prediction}")
+    elif prediction == "negative":
+        st.error(f"Prediction: {prediction}")
     else:
-        vec = vectorizer.transform([user_input])
-        result = model.predict(vec)[0]
+        st.warning(f"Prediction: {prediction}")
 
-        if result == "positive":
-            st.success("😊 Positive")
-        elif result == "negative":
-            st.error("😡 Negative")
-        else:
-            st.warning("😐 Neutral")
+# ---------------- DATA PREVIEW ---------------- #
+st.subheader("Dataset Preview")
+st.dataframe(df.head())
 
-        # Save prediction log
-        os.makedirs('outputs', exist_ok=True)
-        new_data = pd.DataFrame([[user_input, result]], columns=['text', 'sentiment'])
-        new_data.to_csv(output_path, mode='a', header=not os.path.exists(output_path), index=False)
+# ---------------- SENTIMENT DISTRIBUTION ---------------- #
+st.subheader("Sentiment Distribution")
 
-# =========================
-# DATASET
-# =========================
+fig, ax = plt.subplots()
+sns.countplot(x='sentiment', data=df, ax=ax)
+st.pyplot(fig)
 
-df = pd.read_csv(data_path)
-
-df['text'] = df['text'].fillna('')
-df['sentiment'] = df['sentiment'].fillna('neutral')
-
-col1, col2 = st.columns(2)
-
-with col1:
-    st.subheader("Dataset Preview")
-    st.dataframe(df.head(20))
-
-with col2:
-    st.subheader("Sentiment Distribution")
-    st.bar_chart(df['sentiment'].value_counts())
-
-# =========================
-# TEXT LENGTH GRAPH
-# =========================
-
-st.subheader("Text Length Insight (Sample View)")
+# ---------------- TEXT LENGTH ---------------- #
+st.subheader("Text Length Insight")
 
 df['length'] = df['text'].apply(lambda x: len(str(x)))
 
-sample_df = df.sample(500)
-
-st.line_chart(sample_df['length'].reset_index(drop=True))
+fig2, ax2 = plt.subplots()
+ax2.plot(df['length'].values[:1000])
+ax2.set_title("Text Length Trend (Sample)")
+st.pyplot(fig2)
