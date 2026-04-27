@@ -5,34 +5,49 @@ import os
 import matplotlib.pyplot as plt
 from wordcloud import WordCloud
 
-# -----------------------------
+# ==============================
 # PAGE CONFIG
-# -----------------------------
+# ==============================
 st.set_page_config(page_title="Sentiment Dashboard", layout="wide")
 
-# -----------------------------
-# PATH SETUP (WORKS LOCAL + CLOUD)
-# -----------------------------
+# ==============================
+# PATH SETUP
+# ==============================
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 data_path = os.path.join(BASE_DIR, 'data', 'dataset.csv')
 model_path = os.path.join(BASE_DIR, 'models', 'model.pkl')
 vectorizer_path = os.path.join(BASE_DIR, 'models', 'vectorizer.pkl')
 
-# -----------------------------
-# LOAD DATA
-# -----------------------------
-df = pd.read_csv(data_path)
+# ==============================
+# SIDEBAR
+# ==============================
+st.sidebar.title("About Project")
+st.sidebar.info("""
+📊 Sentiment Analysis Dashboard  
+👨‍💻 Built with ML + NLP  
+🚀 Deployed using Streamlit  
 
-# -----------------------------
-# LOAD / TRAIN MODEL
-# -----------------------------
+Author: Your Name
+""")
+
+# ==============================
+# LOAD DATA
+# ==============================
+@st.cache_data
+def load_data():
+    return pd.read_csv(data_path)
+
+df = load_data()
+
+# ==============================
+# LOAD MODEL
+# ==============================
 @st.cache_resource
 def load_model():
     if not os.path.exists(model_path):
-        st.warning("⚠ Model not found. Training model... (first run only)")
-        from src.train import train_model
-        return train_model()
+        st.warning("Model not found. Please train the model first.")
+        return None, None
     else:
         model = pickle.load(open(model_path, 'rb'))
         vectorizer = pickle.load(open(vectorizer_path, 'rb'))
@@ -40,33 +55,45 @@ def load_model():
 
 model, vectorizer = load_model()
 
-# -----------------------------
+# ==============================
 # TITLE
-# -----------------------------
+# ==============================
 st.title("📊 Social Media Sentiment Analysis Dashboard")
 
-# -----------------------------
+st.markdown("""
+### 🔍 About
+This dashboard analyzes social media text and predicts sentiment using Machine Learning.
+
+- Model: Logistic Regression / LinearSVC  
+- Technique: TF-IDF  
+- Classes: Positive, Neutral, Negative  
+""")
+
+# ==============================
 # METRICS
-# -----------------------------
+# ==============================
 col1, col2, col3 = st.columns(3)
 
 col1.metric("Total Rows", len(df))
 col2.metric("Positive", (df['sentiment'] == "positive").sum())
 col3.metric("Negative", (df['sentiment'] == "negative").sum())
 
-# -----------------------------
-# INPUT SECTION
-# -----------------------------
+# ==============================
+# INPUT TEXT
+# ==============================
 st.subheader("Analyze New Post")
 
 user_input = st.text_area("Enter text")
 
 if st.button("Analyze"):
-    if user_input:
-        transformed = vectorizer.transform([user_input])
-        prediction = model.predict(transformed)[0]
+    if model is None:
+        st.error("Model not loaded")
+    elif user_input.strip() == "":
+        st.warning("Please enter text")
+    else:
+        vect_text = vectorizer.transform([user_input])
+        prediction = model.predict(vect_text)[0]
 
-        # Better UI Output
         if prediction == "positive":
             st.success("😊 Positive Sentiment")
         elif prediction == "negative":
@@ -74,15 +101,12 @@ if st.button("Analyze"):
         else:
             st.warning("😐 Neutral Sentiment")
 
-# -----------------------------
-# FILTER + DATA PREVIEW
-# -----------------------------
+# ==============================
+# FILTER
+# ==============================
 st.subheader("Dataset Preview")
 
-sentiment_filter = st.selectbox(
-    "Filter by Sentiment",
-    ["All", "positive", "neutral", "negative"]
-)
+sentiment_filter = st.selectbox("Filter by Sentiment", ["All", "positive", "neutral", "negative"])
 
 if sentiment_filter != "All":
     filtered_df = df[df['sentiment'] == sentiment_filter]
@@ -91,65 +115,83 @@ else:
 
 st.dataframe(filtered_df.head(10))
 
-# -----------------------------
-# SENTIMENT DISTRIBUTION
-# -----------------------------
-st.subheader("Sentiment Distribution")
-
-sentiment_counts = df['sentiment'].value_counts()
-st.bar_chart(sentiment_counts)
-
-# -----------------------------
-# WORDCLOUD (FULL FIXED VERSION)
-# -----------------------------
-st.subheader("WordCloud")
-
-try:
-    text_series = df['text'].dropna().astype(str)
-    text_series = text_series[text_series.str.strip() != ""]
-
-    text_data = " ".join(text_series.tolist())
-
-    if len(text_data) > 0:
-        wordcloud = WordCloud(
-            width=800,
-            height=400,
-            background_color='black'
-        ).generate(text_data)
-
-        fig, ax = plt.subplots()
-        ax.imshow(wordcloud)
-        ax.axis("off")
-
-        st.pyplot(fig)
-    else:
-        st.warning("No valid text available for WordCloud")
-
-except Exception as e:
-    st.error(f"WordCloud error: {e}")
-
-# -----------------------------
-# TEXT LENGTH INSIGHT (FIXED)
-# -----------------------------
-st.subheader("Text Length Insight")
-
-try:
-    text_series = df['text'].dropna().astype(str)
-    text_series = text_series[text_series.str.strip() != ""]
-
-    lengths = text_series.apply(len)
-
-    st.line_chart(lengths)
-
-except Exception as e:
-    st.error(f"Text length error: {e}")
-
-# -----------------------------
+# ==============================
 # DOWNLOAD BUTTON
-# -----------------------------
+# ==============================
 st.download_button(
     label="Download Dataset",
     data=df.to_csv(index=False),
     file_name='dataset.csv',
     mime='text/csv'
 )
+
+# ==============================
+# SENTIMENT DISTRIBUTION
+# ==============================
+st.subheader("Sentiment Distribution")
+
+sentiment_counts = df['sentiment'].value_counts()
+
+fig, ax = plt.subplots()
+ax.bar(sentiment_counts.index, sentiment_counts.values)
+st.pyplot(fig)
+
+# ==============================
+# WORDCLOUDS (FIXED VERSION)
+# ==============================
+st.subheader("Sentiment WordClouds")
+
+col1, col2, col3 = st.columns(3)
+
+def generate_wordcloud(data, title):
+    text = " ".join(data.dropna().astype(str))
+
+    if text.strip() == "":
+        st.write(f"No data for {title}")
+        return None
+
+    wc = WordCloud(width=400, height=300, background_color='black').generate(text)
+
+    fig, ax = plt.subplots()
+    ax.imshow(wc)
+    ax.axis("off")
+    ax.set_title(title)
+    return fig
+
+with col1:
+    fig1 = generate_wordcloud(df[df['sentiment']=="positive"]['text'], "Positive")
+    if fig1:
+        st.pyplot(fig1)
+
+with col2:
+    fig2 = generate_wordcloud(df[df['sentiment']=="neutral"]['text'], "Neutral")
+    if fig2:
+        st.pyplot(fig2)
+
+with col3:
+    fig3 = generate_wordcloud(df[df['sentiment']=="negative"]['text'], "Negative")
+    if fig3:
+        st.pyplot(fig3)
+
+# ==============================
+# CONFUSION MATRIX
+# ==============================
+st.subheader("Model Performance")
+
+conf_path = os.path.join(BASE_DIR, "outputs", "confusion_matrix.png")
+
+if os.path.exists(conf_path):
+    st.image(conf_path, caption="Confusion Matrix")
+else:
+    st.warning("Confusion matrix not found")
+
+# ==============================
+# TEXT LENGTH INSIGHT (FIXED)
+# ==============================
+st.subheader("Text Length Insight")
+
+df['length'] = df['text'].astype(str).apply(len)
+
+fig, ax = plt.subplots()
+ax.plot(df['length'])
+st.pyplot(fig)
