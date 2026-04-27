@@ -129,12 +129,20 @@ except Exception as e:
     st.error(f"WordCloud error: {e}")
 
 # -----------------------------
-# TEXT LENGTH INSIGHT
+# TEXT LENGTH INSIGHT (FIXED)
 # -----------------------------
 st.subheader("Text Length Insight")
 
-df['length'] = df['text'].astype(str).apply(len)
-st.line_chart(df['length'])
+try:
+    text_series = df['text'].dropna().astype(str)
+    text_series = text_series[text_series.str.strip() != ""]
+
+    lengths = text_series.apply(len)
+
+    st.line_chart(lengths)
+
+except Exception as e:
+    st.error(f"Text length error: {e}")
 
 # -----------------------------
 # DOWNLOAD BUTTON
