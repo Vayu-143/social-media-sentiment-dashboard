@@ -12,17 +12,6 @@ from collections import Counter
 st.set_page_config(page_title="Sentiment Dashboard", layout="wide")
 
 # ==============================
-# UI STYLE
-# ==============================
-st.markdown("""
-<style>
-.big-font {
-    font-size:20px !important;
-}
-</style>
-""", unsafe_allow_html=True)
-
-# ==============================
 # PATHS
 # ==============================
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -93,14 +82,31 @@ col2.metric("Positive", (df['sentiment']=="positive").sum())
 col3.metric("Negative", (df['sentiment']=="negative").sum())
 
 # ==============================
-# INPUT + PREDICTION
+# LIVE DEMO BUTTONS
 # ==============================
-st.subheader("Analyze New Post")
+st.subheader("Try Sample Inputs")
 
-user_input = st.text_area("Enter text")
+col1, col2, col3 = st.columns(3)
+
+if col1.button("😡 Bad Experience"):
+    st.session_state.input_text = "Worst service ever, totally disappointed"
+
+if col2.button("😊 Happy Post"):
+    st.session_state.input_text = "I love this product, amazing experience!"
+
+if col3.button("😐 Neutral Post"):
+    st.session_state.input_text = "It is okay, nothing special"
+
+# ==============================
+# INPUT
+# ==============================
+user_input = st.text_area("Enter text", value=st.session_state.get("input_text", ""))
 
 prediction = None
 
+# ==============================
+# PREDICTION
+# ==============================
 if st.button("Analyze"):
     if model is None:
         st.error("Model not loaded")
@@ -110,13 +116,13 @@ if st.button("Analyze"):
         vect_text = vectorizer.transform([user_input])
         prediction = model.predict(vect_text)[0]
 
-        # confidence (if supported)
+        # Confidence
         try:
             probs = model.predict_proba(vect_text)
             confidence = max(probs[0])
             st.write(f"Confidence: {confidence:.2f}")
         except:
-            st.write("Confidence not available for this model")
+            st.write("Confidence not available")
 
         if prediction == "positive":
             st.success("😊 Positive Sentiment")
@@ -148,6 +154,17 @@ if prediction is not None:
         st.success("Feedback saved!")
 
 # ==============================
+# SHOW FEEDBACK DATA
+# ==============================
+st.subheader("User Feedback Data")
+
+if os.path.exists(feedback_path):
+    fb_df = pd.read_csv(feedback_path)
+    st.dataframe(fb_df.tail(10))
+else:
+    st.info("No feedback collected yet")
+
+# ==============================
 # FILTER + TABLE
 # ==============================
 st.subheader("Dataset Preview")
@@ -164,14 +181,10 @@ st.dataframe(filtered_df.head(10))
 # ==============================
 # DOWNLOAD
 # ==============================
-st.download_button(
-    label="Download Dataset",
-    data=df.to_csv(index=False),
-    file_name="dataset.csv"
-)
+st.download_button("Download Dataset", df.to_csv(index=False), "dataset.csv")
 
 # ==============================
-# SENTIMENT DISTRIBUTION
+# BAR CHART
 # ==============================
 st.subheader("Sentiment Distribution")
 
@@ -179,6 +192,15 @@ counts = df['sentiment'].value_counts()
 
 fig, ax = plt.subplots()
 ax.bar(counts.index, counts.values)
+st.pyplot(fig)
+
+# ==============================
+# PIE CHART
+# ==============================
+st.subheader("Sentiment Pie Chart")
+
+fig, ax = plt.subplots()
+ax.pie(counts.values, labels=counts.index, autopct='%1.1f%%')
 st.pyplot(fig)
 
 # ==============================
@@ -190,12 +212,9 @@ col1, col2, col3 = st.columns(3)
 
 def generate_wordcloud(data, title):
     text = " ".join(data.dropna().astype(str))
-
     if text.strip() == "":
         return None
-
     wc = WordCloud(width=400, height=300, background_color='black').generate(text)
-
     fig, ax = plt.subplots()
     ax.imshow(wc)
     ax.axis("off")
@@ -204,18 +223,15 @@ def generate_wordcloud(data, title):
 
 with col1:
     fig1 = generate_wordcloud(df[df['sentiment']=="positive"]['text'], "Positive")
-    if fig1:
-        st.pyplot(fig1)
+    if fig1: st.pyplot(fig1)
 
 with col2:
     fig2 = generate_wordcloud(df[df['sentiment']=="neutral"]['text'], "Neutral")
-    if fig2:
-        st.pyplot(fig2)
+    if fig2: st.pyplot(fig2)
 
 with col3:
     fig3 = generate_wordcloud(df[df['sentiment']=="negative"]['text'], "Negative")
-    if fig3:
-        st.pyplot(fig3)
+    if fig3: st.pyplot(fig3)
 
 # ==============================
 # TOP WORDS
@@ -232,6 +248,18 @@ ax.bar(words_df['word'], words_df['count'])
 st.pyplot(fig)
 
 # ==============================
+# MODEL INFO
+# ==============================
+st.subheader("Model Details")
+
+st.info("""
+- Algorithm: Logistic Regression / LinearSVC  
+- Feature Engineering: TF-IDF  
+- Dataset Size: ~27K rows  
+- Accuracy: ~77–82%  
+""")
+
+# ==============================
 # CONFUSION MATRIX
 # ==============================
 st.subheader("Model Performance")
@@ -244,7 +272,7 @@ else:
     st.warning("Confusion matrix not found")
 
 # ==============================
-# TEXT LENGTH (SAFE)
+# TEXT LENGTH
 # ==============================
 st.subheader("Text Length Insight")
 
@@ -253,3 +281,9 @@ df['length'] = df['text'].apply(lambda x: len(str(x)))
 fig, ax = plt.subplots()
 ax.plot(df['length'])
 st.pyplot(fig)
+
+# ==============================
+# FOOTER
+# ==============================
+st.markdown("---")
+st.markdown("Made with ❤️ using Streamlit | Author: Vayunandan Mishra")
