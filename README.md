@@ -1,9 +1,5 @@
 # 📊 Social Media Sentiment Analysis Dashboard
 
-## 🔗 Live Demo
-
-👉 https://social-media-sentiment-dashboard-buvzjwxu5ez4wrpad8fd62.streamlit.app/
-
 ## 💻 GitHub Repository
 
 👉 https://github.com/Vayu-143/social-media-sentiment-dashboard
@@ -126,7 +122,20 @@ pip install -r requirements.txt
 python src/train.py
 ```
 
-### 3️⃣ Run the Dashboard
+### 3️⃣ Import Reviewed TweetClaw Exports
+
+The training script reads `data/dataset.csv` with `text` and `sentiment`
+columns. To reuse reviewed TweetClaw exports, convert JSON, JSONL, or CSV files
+into that shape before training:
+
+```
+python scripts/tweetclaw_to_dataset_csv.py examples/tweetclaw-export.json data/dataset.csv
+```
+
+Rows without text are skipped. Rows without a sentiment label are skipped unless
+you pass `--default-sentiment neutral`, `positive`, or `negative`.
+
+### 4️⃣ Run the Dashboard
 
 ```
 streamlit run app/app.py

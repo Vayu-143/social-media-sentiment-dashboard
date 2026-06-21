@@ -1,0 +1,17 @@
+[
+  {
+    "id": "tweet-001",
+    "text": "The new dashboard is fast and easy to read.",
+    "sentiment": "positive"
+  },
+  {
+    "id": "tweet-002",
+    "tweetText": "Support took too long to reply today.",
+    "sentiment": "negative"
+  },
+  {
+    "id": "tweet-003",
+    "full_text": "The launch window is set for Friday.",
+    "sentiment": "neutral"
+  }
+]
